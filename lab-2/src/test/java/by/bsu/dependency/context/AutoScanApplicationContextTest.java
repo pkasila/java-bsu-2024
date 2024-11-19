@@ -20,7 +20,7 @@ public class AutoScanApplicationContextTest {
 
         assertTrue(applicationContext.containsBean("firstBean"));
         assertTrue(applicationContext.containsBean("otherBean"));
-        assertTrue(applicationContext.containsBean("prototypeBean"));
+        assertTrue(applicationContext.containsBean("counter"));
         assertFalse(applicationContext.containsBean("main"));
 
         assertThrows(

@@ -109,8 +109,8 @@ class SimpleApplicationContextTest {
         applicationContext.start();
 
         assertNotEquals(
-                applicationContext.getBean("prototypeBean"),
-                applicationContext.getBean("prototypeBean")
+                applicationContext.getBean("counter"),
+                applicationContext.getBean("counter")
         );
     }
 
@@ -118,8 +118,8 @@ class SimpleApplicationContextTest {
     void testPrototypePostConstruct() {
         applicationContext.start();
 
-        applicationContext.getBean("prototypeBean");
-        applicationContext.getBean("prototypeBean");
+        applicationContext.getBean("counter");
+        applicationContext.getBean("counter");
 
         assertEquals(PrototypeBean.counter, 2);
     }
