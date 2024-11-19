@@ -8,6 +8,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import by.bsu.dependency.annotation.Bean;
+import by.bsu.dependency.exceptions.ApplicationContextNotStartedException;
+import by.bsu.dependency.exceptions.NoSuchBeanDefinitionException;
 
 
 public class HardCodedSingletonApplicationContext extends AbstractApplicationContext {
@@ -38,19 +40,16 @@ public class HardCodedSingletonApplicationContext extends AbstractApplicationCon
 
     @Override
     public void start() {
+        contextStatus = ContextStatus.STARTED;
         beanDefinitions.forEach((beanName, beanClass) -> beans.put(beanName, instantiateBean(beanClass)));
-    }
-
-    @Override
-    public boolean isRunning() {
-        throw new IllegalStateException("not implemented");
     }
 
     /**
      * В этой реализации отсутствуют проверки статуса контекста (запущен ли он).
      */
     @Override
-    public boolean containsBean(String name) {
+    public boolean containsBean(String name) throws ApplicationContextNotStartedException {
+        checkRunning();
         return beans.containsKey(name);
     }
 
@@ -58,23 +57,42 @@ public class HardCodedSingletonApplicationContext extends AbstractApplicationCon
      * В этой реализации отсутствуют проверки статуса контекста (запущен ли он) и исключения в случае отсутствия бина
      */
     @Override
-    public Object getBean(String name) {
+    public Object getBean(String name)
+            throws ApplicationContextNotStartedException, NoSuchBeanDefinitionException {
+        checkRunning();
+        checkIfBeanUndefined(name);
         return beans.get(name);
     }
 
     @Override
-    public <T> T getBean(Class<T> clazz) {
-        throw new IllegalStateException("not implemented");
+    public <T> T getBean(Class<T> clazz)
+            throws ApplicationContextNotStartedException, NoSuchBeanDefinitionException {
+        checkRunning();
+        if (beanDefinitions.values().stream().noneMatch(cl -> cl != clazz)) {
+            throw new NoSuchBeanDefinitionException(clazz.toGenericString());
+        }
+        return instantiateBean(clazz);
     }
 
     @Override
-    public boolean isPrototype(String name) {
+    public boolean isPrototype(String name)
+            throws NoSuchBeanDefinitionException {
+        checkIfBeanUndefined(name);
         return false;
     }
 
     @Override
-    public boolean isSingleton(String name) {
+    public boolean isSingleton(String name)
+            throws NoSuchBeanDefinitionException {
+        checkIfBeanUndefined(name);
         return true;
+    }
+
+    private void checkIfBeanUndefined(String name)
+            throws NoSuchBeanDefinitionException {
+        if (!beanDefinitions.containsKey(name)) {
+            throw new NoSuchBeanDefinitionException(name);
+        }
     }
 
     private <T> T instantiateBean(Class<T> beanClass) {
