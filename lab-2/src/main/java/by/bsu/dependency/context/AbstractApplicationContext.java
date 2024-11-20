@@ -5,6 +5,7 @@ import by.bsu.dependency.annotation.BeanScope;
 import by.bsu.dependency.annotation.Inject;
 import by.bsu.dependency.annotation.PostConstruct;
 import by.bsu.dependency.exceptions.ApplicationContextNotStartedException;
+import by.bsu.dependency.exceptions.CyclicDependencyException;
 import by.bsu.dependency.exceptions.NoSuchBeanDefinitionException;
 
 import java.lang.reflect.Field;
@@ -18,11 +19,25 @@ public abstract class AbstractApplicationContext implements ApplicationContext {
         STARTED
     }
 
+    private enum NodeStatus {
+        NOT_VISITED,
+        VISITED,
+        ACTIVE
+    }
+
+    private static class Node {
+        public List<String> children = new ArrayList<>();
+        public NodeStatus status = NodeStatus.NOT_VISITED;
+    }
+
     protected ContextStatus contextStatus = ContextStatus.NOT_STARTED;
 
     protected final Map<Class<?>, BeanConfiguration> beanConfigurationMap = new HashMap<>();
 
-    protected void initializeBeanConfigurations(List<Class<?>> beanClasses) {
+    private final Map<String, Node> graph = new HashMap<>();
+
+    protected void initializeBeanConfigurations(List<Class<?>> beanClasses)
+            throws CyclicDependencyException {
         for (var cl : beanClasses) {
             String className = cl.getSimpleName();
             String name = Character.toLowerCase(className.charAt(0)) + className.substring(1);
@@ -39,6 +54,12 @@ public abstract class AbstractApplicationContext implements ApplicationContext {
                     .filter(f -> f.isAnnotationPresent(Inject.class))
                     .toList();
 
+            String finalName = name;
+            graph.put(finalName, new Node());
+            dependencies.forEach(dependency -> {
+                graph.get(finalName).children.add(dependency.getName());
+            });
+
             BeanConfiguration beanConfig = new BeanConfiguration(name, cl, scope, dependencies);
             beanConfigurationMap.put(cl, beanConfig);
         }
@@ -46,6 +67,8 @@ public abstract class AbstractApplicationContext implements ApplicationContext {
 
     @Override
     public void start() {
+        checkCyclicDependencies();
+
         beanConfigurationMap.values().stream()
                 .filter(bc -> bc.getBeanScope() == BeanScope.SINGLETON)
                 .forEach(bc -> {
@@ -118,7 +141,7 @@ public abstract class AbstractApplicationContext implements ApplicationContext {
 
     @Override
     public Object getBean(String name)
-        throws NoSuchBeanDefinitionException {
+            throws NoSuchBeanDefinitionException {
         if (contextStatus != ContextStatus.STARTED) {
             throw new ApplicationContextNotStartedException();
         }
@@ -167,6 +190,27 @@ public abstract class AbstractApplicationContext implements ApplicationContext {
         injectDependencies(bc, obj);
         executePostConstructMethods(bc, obj);
         return obj;
+    }
+
+    private void checkCyclicDependencies() {
+        if (!graph.isEmpty()) {
+            dfs(graph.keySet().iterator().next());
+        }
+    }
+
+    private void dfs(String name) {
+        Node node = graph.get(name);
+        if (node.status == NodeStatus.ACTIVE) {
+            throw new CyclicDependencyException(name);
+        }
+
+        if (node.status == NodeStatus.NOT_VISITED) {
+            node.status = NodeStatus.ACTIVE;
+            for (String dependency : node.children) {
+                dfs(dependency);
+            }
+            node.status = NodeStatus.VISITED;
+        }
     }
 
     private Optional<Object> findObject(Class<?> cl) {
